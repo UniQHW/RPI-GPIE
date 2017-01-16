@@ -12,30 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-LIB_EXPORT_PATH	   := /usr/local/lib/
-HEADER_EXPORT_PATH := /usr/local/include/
+CC		   := g++
+LIB_EXPORT_PATH	   := /usr/local/lib
+HEADER_EXPORT_PATH := /usr/local/include
+USER		   := $(shell whoami)
 
-ALL: src/gpie.cpp src/gpie.h
+ALL      : src/gpie.cpp src/gpie.h
 	@ if [ -d out ]; then \
 		make clean; \
 	  fi;
 
 	@ make out
 	@ echo
-	g++ -fPIC -shared src/gpie.cpp -o out/libgpie.so
+	$(CC) -fPIC -shared src/gpie.cpp -o out/libgpie.so
 
-out :
+out      :
 	@mkdir out
 
-clean : out
+clean    : out
 	@ rm -R out
 	@ echo done
 
-install : out src/gpie.h out/libgpie.so
-	@cp src/gpie.h $(HEADER_EXPORT_PATH)
-	@cp out/libgpie.so $(LIB_EXPORT_PATH)
-	@echo done
+install  : out src/gpie.h out/libgpie.so
+	@ if [[ $(USER) == "root" ]]; then \
+		echo "Installing gpie header to $(HEADER_EXPORT_PATH)"; \
+		cp src/gpie.h $(HEADER_EXPORT_PATH); \
+		echo "Installing gpie library to $(LIB_EXPORT_PATH)"; \
+		cp out/libgpie.so $(LIB_EXPORT_PATH); \
+		echo done; \
+	  else \
+		echo "Please execute as root"; \
+	  fi
+
+uninstall: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h
+	@ if [[ $(USER) == "root" ]]; then \
+	       echo "Removing $(LIB_EXPORT_PATH)/libgpie.so and $(HEADER_EXPORT_PATH)/gpie.h"; \
+	       rm $(LIB_EXPORT_PATH)/libgpie.so \
+	       	  $(HEADER_EXPORT_PATH)/gpie.h; \
+	       echo "done"; \
+	 else \
+	       echo "Please execute as root"; \
+	 fi		
 
 # Examples
-blink   : $(LIB_EXPORT_PATH)/libgpie.so examples/blink.cpp out
-	g++ -Wl,-rpath,$(LIB_EXPORT_PATH) examples/blink.cpp -lgpie -o out/blink
+examples : $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h examples/ out \
+	   blink
+
+blink    : $(LIB_EXPORT_PATH)/libgpie.so examples/ out
+	$(CC) -Wl,-rpath,$(LIB_EXPORT_PATH) examples/blink.cpp -lgpie -o out/blink
