@@ -17,9 +17,12 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+
+#include <sysfs_paths.h>
+
 #include "gpie.h"
 
-const std::string gpio_sysfs_path = "/sys/class/gpio/";
+using namespace std; // TODO: Remove all std:: calls
 
 /* In G++ 4.9.2, std::to_string is not defined in the standard libraries under ARM Linux */
 template <typename int_type> std::string to_string(int_type val) {
@@ -29,17 +32,32 @@ template <typename int_type> std::string to_string(int_type val) {
 }
 
 gpio::gpio(pin_t pin, mode io = OUT) : gpio_pin(pin), gpio_mode(io) {
-	const std::string export_fd_path = gpio_sysfs_path + "export";
 	const std::string pin_str = to_string<pin_t>(pin);
-	std::ofstream export_fd(export_fd_path.c_str(), std::ofstream::out | std::ofstream::binary);
+
+#ifdef EMULATOR
+	cout << "Waiting for export file to be spawned, make sure your emulator is running" << endl;
+	while(!ifstream(export_path.c_str()).is_open()); // Wait till export file is spawned
+	cout << "Export file found!" << endl;
+#endif
+
+	std::ofstream export_fd(export_path.c_str(), std::ofstream::out | std::ofstream::binary);
 
 	if(export_fd) {
 		export_fd << pin_str;
 		export_fd.close();
-		mode_fd_path = gpio_sysfs_path + "gpio" + pin_str + "/direction";
+		mode_fd_path = std::string(GPIO_SYSFS_PATH) + "/gpio" + pin_str + "/direction";
+
+		while(!ifstream(mode_fd_path.c_str()).is_open()); // Wait till direction file is spawned TODO: Add timeout
+		
 		mode_fd.open(mode_fd_path.c_str(), std::ofstream::out);
 	} else {
-		std::cout << "Failed top open control interface for GPIO " << pin_str << std::endl;
+		std::cout << "Failed to open control interface for GPIO " << pin_str
+
+#ifdef EMULATOR
+		<< std::endl << "Is your GPIE emulator running?"
+#endif	
+
+		<< std::endl;
 	}
 
 	if(mode_fd) {
@@ -47,17 +65,20 @@ gpio::gpio(pin_t pin, mode io = OUT) : gpio_pin(pin), gpio_mode(io) {
 		else   mode_fd << "in"  << std::flush;
 		mode_fd.close();
 	
-		gpio_fd_path = gpio_sysfs_path + "gpio" + pin_str + "/value";
+		gpio_fd_path = std::string(GPIO_SYSFS_PATH) + "/gpio" + pin_str + "/value";
 		set = true;
 	} else {
-		std::cout << "Failed to set mode for GPIO " << pin << std::endl;
+		std::cout << "Failed to set mode for GPIO " << pin 
+#ifdef EMULATOR
+		<< std:: endl << "Is your GPIE emulator running?"
+#endif	
+		<< std::endl;
 	}
 }
 
 gpio::~gpio() {
-	const std::string unexport_fd_path = gpio_sysfs_path + "unexport";
 	const std::string pin_str = to_string<pin_t>(gpio_pin);
-	std::ofstream unexport_fd(unexport_fd_path.c_str());
+	std::ofstream unexport_fd(unexport_path.c_str());
 
 	write(OFF);
 
@@ -101,7 +122,13 @@ bool gpio::write(bit_t state) {
 	bool ret;
 	if(ret = (gpio_mode == OUTPUT)) {
 		gpio_fd.open(gpio_fd_path.c_str(), std::ofstream::out | std::ios::binary);
+		
+		if(gpio_fd)
 			gpio_fd << state << std::flush;
+		else
+			cout << "Failed to write on gpio " << gpio_pin << endl;
+		
+
 		gpio_fd.close();
 
 		gpio_state = state;
@@ -113,7 +140,12 @@ bit_t gpio::toggleState() {
 	if(gpio_mode == OUTPUT) {
 		gpio_state = !gpio_state;
 		gpio_fd.open(gpio_fd_path.c_str(), std::ofstream::out | std::ios::binary);
+		
+		if(gpio_fd)
 			gpio_fd << gpio_state << std::flush;
+		else
+			cout << "Failed to toggle state on gpio" << gpio_pin << endl;
+		
 		gpio_fd.close();
 
 		return gpio_state;

@@ -12,31 +12,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CC		   := g++
+# I'm bad at makefiles, deal with it
+
+CC		   := g++ -g
+LIB_FLAGS	   := -fPIC -shared
 LIB_EXPORT_PATH	   := /usr/local/lib
 HEADER_EXPORT_PATH := /usr/local/include
-USER		   := $(shell whoami)
+LIB_LINK_FLAGS     := -Wl,-rpath,$(LIB_EXPORT_PATH)
 
-ALL      : src/gpie.cpp src/gpie.h
-	@ if [ -d out ]; then \
-		make clean; \
-	  fi;
+GLOBAL_INCLUDE	   := src/include
+EMU_INCLUDE	   := src/emulator/include
 
-	@ make out
+TARGET_GPIE 	   := src/gpie/gpie.cpp
+TARGET_GPIE_OUT	   := libgpie.so
+
+TARGET_EMU_CORE    := src/emulator/fs.cpp \
+		      src/emulator/sysfs.cpp \
+		      src/emulator/init.cpp
+
+TARGET_EMU_CLI     := $(TARGET_EMU_CORE) \
+		      src/emulator/cli/emulation.cpp
+
+TARGET_EMU_CLI_OUT := gpiemucli
+
+# GPIE build
+ALL: $(TARGET_GPIE) out
 	@ echo
-	$(CC) -fPIC -shared src/gpie.cpp -o out/libgpie.so
+	$(CC) $(LIB_FLAGS) -I$(GLOBAL_INCLUDE) $(TARGET_GPIE) -o out/$(TARGET_GPIE_OUT)
 
-out      :
-	@mkdir out
+emubuild: emugpie emucli
+	@echo done
 
-clean    : out
+# Explicit GPIE Emulator build
+emugpie: $(TARGET_GPIE) out 
+	$(CC) $(LIB_FLAGS) -DEMULATOR -I$(GLOBAL_INCLUDE) $(TARGET_GPIE) -o out/$(TARGET_GPIE_OUT)
+
+# Emulator build (Commandline interface)
+emucli: $(TARGET_EMU_CLI) out
+	$(CC) $(LIB_LINK_FLAGS) -DEMULATOR -I$(GLOBAL_INCLUDE) -I$(EMU_INCLUDE) $(TARGET_EMU_CLI) -lgpie -o out/$(TARGET_EMU_CLI_OUT)
+	@echo done
+
+## Examples
+examples: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h examples/ out \
+	   blink
+
+# Blink Example
+blink: $(LIB_EXPORT_PATH)/libgpie.so examples/ out
+	$(CC) -Wl,-rpath,$(LIB_EXPORT_PATH) examples/blink.cpp -lgpie -o out/blink
+
+# Create output dir if necessary
+out:
+	@if [ ! -d out ]; then \
+		mkdir out; \
+	 fi
+
+# Clean build env
+clean: out
+	@ echo cleaning...
 	@ rm -R out
 	@ echo done
 
-install  : out src/gpie.h out/libgpie.so
+# Install gpie lib
+install-gpie: out/$(TARGET_GPIE_OUT)
 	@ if [[ $(USER) == "root" ]]; then \
 		echo "Installing gpie header to $(HEADER_EXPORT_PATH)"; \
-		cp src/gpie.h $(HEADER_EXPORT_PATH); \
+		cp src/gpie/gpie.h $(HEADER_EXPORT_PATH); \
 		echo "Installing gpie library to $(LIB_EXPORT_PATH)"; \
 		cp out/libgpie.so $(LIB_EXPORT_PATH); \
 		echo done; \
@@ -44,7 +84,8 @@ install  : out src/gpie.h out/libgpie.so
 		echo "Please execute as root"; \
 	  fi
 
-uninstall: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h
+# Uninstall gpie lib
+uninstall-gpie: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h
 	@ if [[ $(USER) == "root" ]]; then \
 	       echo "Removing $(LIB_EXPORT_PATH)/libgpie.so and $(HEADER_EXPORT_PATH)/gpie.h"; \
 	       rm $(LIB_EXPORT_PATH)/libgpie.so \
@@ -52,11 +93,4 @@ uninstall: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h
 	       echo "done"; \
 	 else \
 	       echo "Please execute as root"; \
-	 fi		
-
-# Examples
-examples : $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h examples/ out \
-	   blink
-
-blink    : $(LIB_EXPORT_PATH)/libgpie.so examples/ out
-	$(CC) -Wl,-rpath,$(LIB_EXPORT_PATH) examples/blink.cpp -lgpie -o out/blink
+	 fi
