@@ -20,18 +20,18 @@ LIB_EXPORT_PATH	   := /usr/local/lib
 HEADER_EXPORT_PATH := /usr/local/include
 LIB_LINK_FLAGS     := -Wl,-rpath,$(LIB_EXPORT_PATH)
 
-GLOBAL_INCLUDE	   := src/include
-EMU_INCLUDE	   := src/emulator/include
+GLOBAL_INCLUDE	   := include
+EMU_INCLUDE	   := emulator/include
 
-TARGET_GPIE 	   := src/gpie/gpie.cpp
+TARGET_GPIE 	   := gpie/gpie.cpp
 TARGET_GPIE_OUT	   := libgpie.so
 
-TARGET_EMU_CORE    := src/emulator/fs.cpp \
-		      src/emulator/sysfs.cpp \
-		      src/emulator/init.cpp
+TARGET_EMU_CORE    := emulator/fs.cpp \
+		      		emulator/sysfs.cpp \
+		      		emulator/init.cpp
 
 TARGET_EMU_CLI     := $(TARGET_EMU_CORE) \
-		      src/emulator/cli/emulation.cpp
+		      emulator/cli/emulation.cpp
 
 TARGET_EMU_CLI_OUT := gpiemucli
 
@@ -76,7 +76,7 @@ clean: out
 install-gpie: out/$(TARGET_GPIE_OUT)
 	@ if [[ $(USER) == "root" ]]; then \
 		echo "Installing gpie header to $(HEADER_EXPORT_PATH)"; \
-		cp src/gpie/gpie.h $(HEADER_EXPORT_PATH); \
+		cp gpie/gpie.h $(HEADER_EXPORT_PATH); \
 		echo "Installing gpie library to $(LIB_EXPORT_PATH)"; \
 		cp out/libgpie.so $(LIB_EXPORT_PATH); \
 		echo done; \
