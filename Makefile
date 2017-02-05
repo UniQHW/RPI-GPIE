@@ -12,17 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Do not re-build targets
-
 CC		         := g++
 CFLAGS		         := -g -Wall
 
-TARGET_OUT		 := out
-
 # GPIE API library
 GPIE_SRC		 := gpie/gpie.cpp
-TARGET_OUT_GPIE		 := libgpie
-TARGET_OUT_GPIE_EMU	 := libgpie_emu
+TARGET_OUT_GPIE		 := out/libgpie.so
 
 # Emulator core
 EMULATOR_CORE_SRC        := emulator/init.cpp \
@@ -35,40 +30,47 @@ TARGET_OUT_EMULATOR_CORE := out/emulator/init.o  \
 
 # Emulator CLI
 EMULATOR_CLI_SRC         := emulator/cli/emulation.cpp
-TARGET_OUT_EMULATOR_CLI  := emucli
+TARGET_OUT_EMULATOR_CLI  := out/emucli
 
 # Blink example
 BLINK_EXAMPLE_SRC        := examples/blink.cpp
-TARGET_OUT_BLINK_EXAMPLE := blink
+TARGET_OUT_BLINK_EXAMPLE := out/examples/blink
 
-# Installation targets
-TARGET_INSTALL_GPIE	 := install-gpie
-TARGET_INSTALL_CLI_EMU   := install-emucli
+# API
+libgpie: $(TARGET_OUT_GPIE)
+
+# API  for emulator
+libgpie_emu: CFLAGS += -DEMULATOR
+libgpie_emu: $(TARGET_OUT_GPIE)
+
+# Emulator client
+emucli: $(TARGET_OUT_EMULATOR_CLI)
+
+# Examples
+blink: $(TARGET_OUT_BLINK_EXAMPLE)
 
 # Build GPIE API library
-$(TARGET_OUT_GPIE): $(TARGET_OUT) $(GPIE_SRC)
-	$(CC) $(CFLAGS) -fPIC -shared -Iinclude $(GPIE_SRC) -o out/$(TARGET_OUT_GPIE).so
-
-$(TARGET_OUT_GPIE_EMU): $(TARGET_OUT) $(GPIE_SRC)
-	$(CC) $(CFLAGS) -fPIC -shared -Iinclude -DEMULATOR $(GPIE_SRC) -o out/$(TARGET_OUT_GPIE).so
+$(TARGET_OUT_GPIE): $(GPIE_SRC)
+	@mkdir -p out
+	$(CC) $(CFLAGS) -fPIC -shared -Iinclude $(GPIE_SRC) -o $(TARGET_OUT_GPIE)
 
 # API Emulator CLI
 $(TARGET_OUT_EMULATOR_CLI): $(TARGET_OUT_EMULATOR_CORE) $(EMULATOR_CLI_SRC)
-	$(CC) $(CFLAGS) -DEMULATOR -Iinclude -Iemulator/include $(TARGET_OUT_EMULATOR_CORE) $(EMULATOR_CLI_SRC) -o out/$(TARGET_OUT_EMULATOR_CLI)
+	$(CC) $(CFLAGS) -DEMULATOR -Iinclude -Iemulator/include $(TARGET_OUT_EMULATOR_CORE) $(EMULATOR_CLI_SRC) -o $(TARGET_OUT_EMULATOR_CLI)
 
 # Core sources for API emulator
-$(TARGET_OUT_EMULATOR_CORE): $(TARGET_OUT) $(EMULATOR_CORE_SRC)
+$(TARGET_OUT_EMULATOR_CORE): $(EMULATOR_CORE_SRC)
 	@mkdir -p out/emulator
 	$(CC) $(CFLAGS) -DEMULATOR -Iinclude -Iemulator/include -c $(EMULATOR_CORE_SRC)
 	@mv *.o out/emulator
 
 # Blink example
-$(TARGET_OUT_BLINK_EXAMPLE): $(TARGET_OUT) $(BLINK_EXAMPLE_SRC)
+$(TARGET_OUT_BLINK_EXAMPLE): $(BLINK_EXAMPLE_SRC)
 	@mkdir -p out/examples
-	$(CC) $(CFLAGS) -Wl,-rpath,/usr/local/lib $(BLINK_EXAMPLE_SRC) -lgpie -o out/examples/$(TARGET_OUT_BLINK_EXAMPLE)
+	$(CC) $(CFLAGS) -Wl,-rpath,/usr/local/lib $(BLINK_EXAMPLE_SRC) -lgpie -o $(TARGET_OUT_BLINK_EXAMPLE)
 
 # Install GPIE API Library
-$(TARGET_INSTALL_GPIE): $(TARGET_OUT_GPIE)
+install-gpie: $(TARGET_OUT_GPIE)
 	@ if [[ $(USER) == "root" ]]; then \
 		echo "Installing gpie header to /usr/local/include"; \
 		cp gpie/gpie.h /usr/local/include; \
@@ -79,7 +81,7 @@ $(TARGET_INSTALL_GPIE): $(TARGET_OUT_GPIE)
   		echo "Please execute as root"; \
 	  fi
 
-$(TARGET_INSTALL_CLI_EMU): $(TARGET_OUT_EMULATOR_CLI)
+install-emucli: $(TARGET_OUT_EMULATOR_CLI)
 	@ if [[ $(USER) == "root" ]]; then \
 		echo "Installing emulator to /usr/local/bin"; \
 		cp out/emucli /usr/local/bin; \
@@ -87,9 +89,6 @@ $(TARGET_INSTALL_CLI_EMU): $(TARGET_OUT_EMULATOR_CLI)
 	  else \
   		echo "Please execute as root"; \
 	  fi
-
-$(TARGET_OUT):
-	@mkdir -p out
 
 clean: out
 	@rm -R out
