@@ -12,85 +12,84 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# I'm bad at makefiles, deal with it
+# TODO: Do not re-build targets
 
-CC		   := g++ -g
-LIB_FLAGS	   := -fPIC -shared
-LIB_EXPORT_PATH	   := /usr/local/lib
-HEADER_EXPORT_PATH := /usr/local/include
-LIB_LINK_FLAGS     := -Wl,-rpath,$(LIB_EXPORT_PATH)
+CC		         := g++
+CFLAGS		         := -g -Wall
 
-GLOBAL_INCLUDE	   := include
-EMU_INCLUDE	   := emulator/include
+TARGET_OUT		 := out
 
-TARGET_GPIE 	   := gpie/gpie.cpp
-TARGET_GPIE_OUT	   := libgpie.so
+# GPIE API library
+GPIE_SRC		 := gpie/gpie.cpp
+TARGET_OUT_GPIE		 := libgpie
+TARGET_OUT_GPIE_EMU	 := libgpie_emu
 
-TARGET_EMU_CORE    := emulator/fs.cpp \
-		      		emulator/sysfs.cpp \
-		      		emulator/init.cpp
+# Emulator core
+EMULATOR_CORE_SRC        := emulator/init.cpp \
+			    emulator/fs.cpp   \
+			    emulator/sysfs.cpp\
 
-TARGET_EMU_CLI     := $(TARGET_EMU_CORE) \
-		      emulator/cli/emulation.cpp
+TARGET_OUT_EMULATOR_CORE := out/emulator/init.o  \
+		            out/emulator/fs.o    \
+			    out/emulator/sysfs.o
 
-TARGET_EMU_CLI_OUT := gpiemucli
+# Emulator CLI
+EMULATOR_CLI_SRC         := emulator/cli/emulation.cpp
+TARGET_OUT_EMULATOR_CLI  := emucli
 
-# GPIE build
-ALL: $(TARGET_GPIE) out
-	@ echo
-	$(CC) $(LIB_FLAGS) -I$(GLOBAL_INCLUDE) $(TARGET_GPIE) -o out/$(TARGET_GPIE_OUT)
+# Blink example
+BLINK_EXAMPLE_SRC        := examples/blink.cpp
+TARGET_OUT_BLINK_EXAMPLE := blink
 
-emubuild: emugpie emucli
-	@echo done
+# Installation targets
+TARGET_INSTALL_GPIE	 := install-gpie
+TARGET_INSTALL_CLI_EMU   := install-emucli
 
-# Explicit GPIE Emulator build
-emugpie: $(TARGET_GPIE) out 
-	$(CC) $(LIB_FLAGS) -DEMULATOR -I$(GLOBAL_INCLUDE) $(TARGET_GPIE) -o out/$(TARGET_GPIE_OUT)
+# Build GPIE API library
+$(TARGET_OUT_GPIE): $(TARGET_OUT) $(GPIE_SRC)
+	$(CC) $(CFLAGS) -fPIC -shared -Iinclude $(GPIE_SRC) -o out/$(TARGET_OUT_GPIE).so
 
-# Emulator build (Commandline interface)
-emucli: $(TARGET_EMU_CLI) out
-	$(CC) $(LIB_LINK_FLAGS) -DEMULATOR -I$(GLOBAL_INCLUDE) -I$(EMU_INCLUDE) $(TARGET_EMU_CLI) -lgpie -o out/$(TARGET_EMU_CLI_OUT)
-	@echo done
+$(TARGET_OUT_GPIE_EMU): $(TARGET_OUT) $(GPIE_SRC)
+	$(CC) $(CFLAGS) -fPIC -shared -Iinclude -DEMULATOR $(GPIE_SRC) -o out/$(TARGET_OUT_GPIE).so
 
-## Examples
-examples: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h examples/ out \
-	   blink
+# API Emulator CLI
+$(TARGET_OUT_EMULATOR_CLI): $(TARGET_OUT_EMULATOR_CORE) $(EMULATOR_CLI_SRC)
+	$(CC) $(CFLAGS) -DEMULATOR -Iinclude -Iemulator/include $(TARGET_OUT_EMULATOR_CORE) $(EMULATOR_CLI_SRC) -o out/$(TARGET_OUT_EMULATOR_CLI)
 
-# Blink Example
-blink: $(LIB_EXPORT_PATH)/libgpie.so examples/ out
-	$(CC) -Wl,-rpath,$(LIB_EXPORT_PATH) examples/blink.cpp -lgpie -o out/blink
+# Core sources for API emulator
+$(TARGET_OUT_EMULATOR_CORE): $(TARGET_OUT) $(EMULATOR_CORE_SRC)
+	@mkdir -p out/emulator
+	$(CC) $(CFLAGS) -DEMULATOR -Iinclude -Iemulator/include -c $(EMULATOR_CORE_SRC)
+	@mv *.o out/emulator
 
-# Create output dir if necessary
-out:
-	@if [ ! -d out ]; then \
-		mkdir out; \
-	 fi
+# Blink example
+$(TARGET_OUT_BLINK_EXAMPLE): $(TARGET_OUT) $(BLINK_EXAMPLE_SRC)
+	@mkdir -p out/examples
+	$(CC) $(CFLAGS) -Wl,-rpath,/usr/local/lib $(BLINK_EXAMPLE_SRC) -lgpie -o out/examples/$(TARGET_OUT_BLINK_EXAMPLE)
 
-# Clean build env
-clean: out
-	@ echo cleaning...
-	@ rm -R out
-	@ echo done
-
-# Install gpie lib
-install-gpie: out/$(TARGET_GPIE_OUT)
+# Install GPIE API Library
+$(TARGET_INSTALL_GPIE): $(TARGET_OUT_GPIE)
 	@ if [[ $(USER) == "root" ]]; then \
-		echo "Installing gpie header to $(HEADER_EXPORT_PATH)"; \
-		cp gpie/gpie.h $(HEADER_EXPORT_PATH); \
-		echo "Installing gpie library to $(LIB_EXPORT_PATH)"; \
-		cp out/libgpie.so $(LIB_EXPORT_PATH); \
+		echo "Installing gpie header to /usr/local/include"; \
+		cp gpie/gpie.h /usr/local/include; \
+		echo "Installing gpie library to /usr/local/lib"; \
+		cp out/libgpie.so /usr/local/lib; \
 		echo done; \
 	  else \
-		echo "Please execute as root"; \
+  		echo "Please execute as root"; \
 	  fi
 
-# Uninstall gpie lib
-uninstall-gpie: $(LIB_EXPORT_PATH)/libgpie.so $(HEADER_EXPORT_PATH)/gpie.h
+$(TARGET_INSTALL_CLI_EMU): $(TARGET_OUT_EMULATOR_CLI)
 	@ if [[ $(USER) == "root" ]]; then \
-	       echo "Removing $(LIB_EXPORT_PATH)/libgpie.so and $(HEADER_EXPORT_PATH)/gpie.h"; \
-	       rm $(LIB_EXPORT_PATH)/libgpie.so \
-	       	  $(HEADER_EXPORT_PATH)/gpie.h; \
-	       echo "done"; \
-	 else \
-	       echo "Please execute as root"; \
-	 fi
+		echo "Installing emulator to /usr/local/bin"; \
+		cp out/emucli /usr/local/bin; \
+		echo done; \
+	  else \
+  		echo "Please execute as root"; \
+	  fi
+
+$(TARGET_OUT):
+	@mkdir -p out
+
+clean: out
+	@rm -R out
